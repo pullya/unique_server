@@ -1,0 +1,16 @@
+version: "3"
+services:
+  u_server:
+    build: ./u-server
+    ports:
+      - 8081:8081
+    networks:
+      - test_network
+  u_client:
+    depends_on:
+      - u_server
+    build: ./u-client
+    networks:
+      - test_network
+networks:
+  test_network:
