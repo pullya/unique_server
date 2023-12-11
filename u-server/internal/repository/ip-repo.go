@@ -2,46 +2,37 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"sync"
+
+	"github.com/pullya/unique_server/u-server/internal/config"
 )
 
 type IpRepo struct {
-	UniqueIps map[string]struct{}
-	mu        *sync.RWMutex
+	UniqueIps map[string]int
+	mu        *sync.Mutex
 }
 
 func NewIpRepo() IpRepo {
-	uniqueIps := make(map[string]struct{}, 0)
+	uniqueIps := make(map[string]int, 0)
 	return IpRepo{
 		UniqueIps: uniqueIps,
-		mu:        &sync.RWMutex{},
+		mu:        &sync.Mutex{},
 	}
 }
 
 type IIpRepo interface {
 	IsNewIp(ctx context.Context, ip string) bool
-	AddIp(ctx context.Context, ip string) error
 }
 
 func (ir *IpRepo) IsNewIp(ctx context.Context, ip string) bool {
-	ir.mu.RLock()
-	defer ir.mu.RUnlock()
-
-	if _, ok := ir.UniqueIps[ip]; ok {
-		return false
-	}
-	return true
-}
-
-func (ir *IpRepo) AddIp(ctx context.Context, ip string) error {
 	ir.mu.Lock()
 	defer ir.mu.Unlock()
 
-	if _, ok := ir.UniqueIps[ip]; ok {
-		return errors.New("ip is not unique")
+	cnt, ok := ir.UniqueIps[ip]
+	if ok && cnt > config.MaxIpConnection {
+		return false
 	}
 
-	ir.UniqueIps[ip] = struct{}{}
-	return nil
+	ir.UniqueIps[ip]++
+	return true
 }
