@@ -18,6 +18,7 @@ RUN go build -o ./bin/u-server cmd/u-server/main.go
 
 FROM alpine:latest AS server
 COPY --from=builder /usr/local/src/bin/u-server /
+COPY config.yaml ./
 
 CMD ["/u-server"]
 

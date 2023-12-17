@@ -12,7 +12,9 @@ import (
 )
 
 func init() {
-	log.SetLevel(config.LogLevel)
+	config.ReadConfig()
+	config.InitLogger()
+	log.SetLevel(config.Config.LogLevel.ToLogrusFormat())
 }
 
 func main() {
@@ -22,7 +24,7 @@ func main() {
 
 	go func() {
 		sig := <-sigCh
-		log.WithField("service", config.ServiceName).Warnf("Received signal %v. Shutting down...", sig)
+		config.Logger.Warnf("Received signal %v. Shutting down...", sig)
 
 		cancel()
 	}()
@@ -30,6 +32,6 @@ func main() {
 	app := app.InitApp()
 
 	if err := app.Run(ctx); err != nil {
-		log.WithField("service", config.ServiceName).Fatalf("Error while running application: %v", err)
+		config.Logger.Fatalf("Error while running application: %v", err)
 	}
 }

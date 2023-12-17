@@ -15,7 +15,7 @@ type Message struct {
 	MessageString string `json:"messageString"`
 }
 
-func (m *Message) AsJson() []byte {
+func (m Message) AsJson() []byte {
 	res, err := json.Marshal(m)
 	if err != nil {
 		fmt.Printf("failed to marshall message: %v", err)

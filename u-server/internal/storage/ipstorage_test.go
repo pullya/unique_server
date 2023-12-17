@@ -1,4 +1,4 @@
-package repository
+package storage
 
 import (
 	"context"
@@ -8,13 +8,14 @@ import (
 	"github.com/pullya/unique_server/u-server/internal/config"
 )
 
-func TestIpRepo_IsNewIp(t *testing.T) {
+func TestIpStorage_IsNewIp(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	mu := sync.Mutex{}
 	type fields struct {
-		UniqueIps map[string]int
+		uniqueIps map[uint32]map[string]int
+		shardFunc func(in string) uint32
 		mu        *sync.Mutex
 	}
 	type args struct {
@@ -30,7 +31,8 @@ func TestIpRepo_IsNewIp(t *testing.T) {
 		{
 			name: "Brand new ip",
 			fields: fields{
-				UniqueIps: map[string]int{"127.0.0.1": 1, "192.168.1.1": 2},
+				uniqueIps: map[uint32]map[string]int{uint32(2): {"127.0.0.1": 1}, uint32(0): {"192.168.1.1": 2}},
+				shardFunc: ShardKey,
 				mu:        &mu,
 			},
 			args: args{
@@ -42,7 +44,8 @@ func TestIpRepo_IsNewIp(t *testing.T) {
 		{
 			name: "Not a new ip, but connection approved #1",
 			fields: fields{
-				UniqueIps: map[string]int{"127.0.0.1": 1, "192.168.1.1": config.MaxIpConnection - 1},
+				uniqueIps: map[uint32]map[string]int{uint32(2): {"127.0.0.1": 1}, uint32(0): {"192.168.1.1": config.Config.MaxIpConn - 1}},
+				shardFunc: ShardKey,
 				mu:        &mu,
 			},
 			args: args{
@@ -52,21 +55,23 @@ func TestIpRepo_IsNewIp(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "Not a new ip, but connection approved #2",
+			name: "Not a new ip, connection = MaxIpConn #2",
 			fields: fields{
-				UniqueIps: map[string]int{"127.0.0.1": 1, "192.168.1.1": config.MaxIpConnection},
+				uniqueIps: map[uint32]map[string]int{uint32(2): {"127.0.0.1": 1}, uint32(0): {"192.168.1.1": config.Config.MaxIpConn}},
+				shardFunc: ShardKey,
 				mu:        &mu,
 			},
 			args: args{
 				ctx: ctx,
 				ip:  "192.168.1.1",
 			},
-			want: true,
+			want: false,
 		},
 		{
 			name: "Not a new ip, connection refused",
 			fields: fields{
-				UniqueIps: map[string]int{"127.0.0.1": 1, "192.168.1.1": config.MaxIpConnection + 1},
+				uniqueIps: map[uint32]map[string]int{uint32(2): {"127.0.0.1": 1}, uint32(0): {"192.168.1.1": config.Config.MaxIpConn + 1}},
+				shardFunc: ShardKey,
 				mu:        &mu,
 			},
 			args: args{
@@ -78,12 +83,14 @@ func TestIpRepo_IsNewIp(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ir := &IpRepo{
-				UniqueIps: tt.fields.UniqueIps,
+			ir := &IpStorage{
+				uniqueIps: tt.fields.uniqueIps,
+				shardFunc: ShardKey,
 				mu:        tt.fields.mu,
 			}
+
 			if got := ir.IsNewIp(tt.args.ctx, tt.args.ip); got != tt.want {
-				t.Errorf("IpRepo.IsNewIp() = %v, want %v", got, tt.want)
+				t.Errorf("IpStorage.IsNewIp() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -3,14 +3,30 @@ services:
   u_server:
     build: ./u-server
     ports:
-      - 8081:8081
+      - 8082:8082
     networks:
       - test_network
+    environment:
+      - U_SERVER_PORT
+      - U_SERVER_TIMEOUT
+      - U_SERVER_SERVICE_NAME
+      - U_SERVER_ENDPOINT
+      - U_SERVER_STRICT_MODE
+      - U_SERVER_MAX_IP_CONN
+      - U_SERVER_LOG_LEVEL
   u_client:
     depends_on:
       - u_server
     build: ./u-client
     networks:
       - test_network
+    environment:
+      - U_CLIENT_PORT
+      - U_CLIENT_TIMEOUT
+      - U_CLIENT_SERVICE_NAME
+      - U_CLIENT_ENDPOINT
+      - U_CLIENT_CONN_CNT
+      - U_CLIENT_CONN_INTERVAL
+      - U_CLIENT_LOG_LEVEL
 networks:
   test_network:

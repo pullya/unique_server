@@ -5,6 +5,8 @@ go 1.21.4
 require (
 	github.com/gorilla/websocket v1.5.1
 	github.com/sirupsen/logrus v1.9.3
+	github.com/spaolacci/murmur3 v1.1.0
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (

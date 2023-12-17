@@ -21,15 +21,13 @@ const (
 	logLevelPanic = "Panic"
 	logLevelTrace = "Trace"
 
-	envPort        = "U_SERVER_PORT"
-	envTimeout     = "U_SERVER_TIMEOUT"
-	envServiceName = "U_SERVER_SERVICE_NAME"
-	envEndpoint    = "U_SERVER_ENDPOINT"
-	envStrictMode  = "U_SERVER_STRICT_MODE"
-	envMaxIpConn   = "U_SERVER_MAX_IP_CONN"
-	envLogLevel    = "U_SERVER_LOG_LEVEL"
-
-	shardsCount = 8
+	envPort         = "U_CLIENT_PORT"
+	envTimeout      = "U_CLIENT_TIMEOUT"
+	envServiceName  = "U_CLIENT_SERVICE_NAME"
+	envEndpoint     = "U_CLIENT_ENDPOINT"
+	envConnCnt      = "U_CLIENT_CONN_CNT"
+	envConnInterval = "U_CLIENT_CONN_INTERVAL"
+	envLogLevel     = "U_CLIENT_LOG_LEVEL"
 )
 
 var Config Configuration
@@ -49,8 +47,8 @@ var envArray = []string{
 	envTimeout,
 	envServiceName,
 	envEndpoint,
-	envStrictMode,
-	envMaxIpConn,
+	envConnCnt,
+	envConnInterval,
 	envLogLevel,
 }
 
@@ -61,11 +59,9 @@ type Configuration struct {
 	Timeout     int    `yaml:"timeout"`
 	ServiceName string `yaml:"serviceName"`
 
-	Endpoint   string `yaml:"endpoint"`
-	StrictMode string `yaml:"strictMode"`
-	MaxIpConn  int    `yaml:"maxIpConnection"`
-
-	ShardsCnt int `yaml:"shardsCnt"`
+	Endpoint     string `yaml:"endpoint"`
+	ConnCnt      int    `yaml:"connectionCnt"`
+	ConnInterval int    `yaml:"connectionInterval"`
 
 	LogLevel LogLevel `yaml:"logLevel"`
 }
@@ -84,7 +80,6 @@ func ReadConfig() {
 		log.Fatalf("failed to unmarshall config file '%s', error: %v", configFile, err)
 		return
 	}
-	Config.ShardsCnt = shardsCount
 
 	log.Debugf("Default configuration read: %v", Config)
 
@@ -121,17 +116,17 @@ func checkEnv() {
 			case envEndpoint:
 				Config.Endpoint = envVal
 				log.Debugf("endpoint set to %s", Config.Endpoint)
-			case envStrictMode:
-				sm, err := validateMode(envVal)
-				if err == nil {
-					Config.StrictMode = sm
-					log.Debugf("strictMode set to %s", Config.StrictMode)
-				}
-			case envMaxIpConn:
+			case envConnCnt:
 				mic, err := validateMaxIpConn(envVal)
 				if err == nil {
-					Config.MaxIpConn = mic
-					log.Debugf("maxIpConn set to %d", Config.MaxIpConn)
+					Config.ConnCnt = mic
+					log.Debugf("maxIpConn set to %d", Config.ConnCnt)
+				}
+			case envConnInterval:
+				mic, err := validateTimeout(envVal)
+				if err == nil {
+					Config.ConnInterval = mic
+					log.Debugf("connInterval set to %d", Config.ConnInterval)
 				}
 			case envLogLevel:
 				ll, err := validateLogLevel(envVal)
@@ -161,16 +156,9 @@ func validateTimeout(in string) (int, error) {
 		return 0, err
 	}
 	if num < 0 {
-		return 0, errors.New("incorrect timeout")
+		return 0, errors.New("incorrect timeout/interval")
 	}
 	return num, nil
-}
-
-func validateMode(in string) (string, error) {
-	if in != "on" && in != "off" {
-		return "", errors.New("incorrect mode")
-	}
-	return in, nil
 }
 
 func validateMaxIpConn(in string) (int, error) {

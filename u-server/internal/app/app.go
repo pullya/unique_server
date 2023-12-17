@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/pullya/unique_server/u-server/internal/config"
 	"github.com/pullya/unique_server/u-server/internal/model"
-	"github.com/pullya/unique_server/u-server/internal/repository"
-	log "github.com/sirupsen/logrus"
+	"github.com/pullya/unique_server/u-server/internal/storage"
 )
 
 var upgrader = websocket.Upgrader{
@@ -20,67 +21,97 @@ var upgrader = websocket.Upgrader{
 }
 
 type App struct {
-	IpRepo  repository.IIpRepo
-	NumRepo repository.INumRepo
+	IpStorage  storage.IpStorageer
+	NumStorage storage.NumStorageer
+
+	endpoint string
+	port     int
 
 	wg *sync.WaitGroup
 }
 
 func InitApp() App {
-	ipRepo := repository.NewIpRepo()
-	numRepo := repository.NewNumRepo()
+	ipStorage := storage.NewIpStorage()
+	numStorage := storage.NewNumStorage()
 
 	wg := sync.WaitGroup{}
 
 	return App{
-		IpRepo:  &ipRepo,
-		NumRepo: &numRepo,
-		wg:      &wg,
+		IpStorage:  &ipStorage,
+		NumStorage: &numStorage,
+		endpoint:   config.Config.Endpoint,
+		port:       config.Config.Port,
+		wg:         &wg,
 	}
 }
 
 func (a *App) Run(ctx context.Context) error {
-	http.HandleFunc(config.Endpoint, func(w http.ResponseWriter, r *http.Request) {
-		a.wg.Add(1)
-		go a.handleConnection(ctx, w, r)
+	http.HandleFunc(a.endpoint, func(w http.ResponseWriter, r *http.Request) {
+		a.handleConnection(ctx, w, r)
 	})
 
-	err := http.ListenAndServe(preparePort(config.WsPort), nil)
+	config.Logger.Debugf("WebSocket server is running on :%d", a.port)
+
+	err := http.ListenAndServe(preparePort(a.port), nil)
 	if err != nil {
+		config.Logger.Errorf("Failed to run server: %v", err)
 		return err
 	}
-	log.WithField("service", config.ServiceName).Infof("WebSocket server is running on :%d", config.WsPort)
 
-	a.wg.Wait()
 	return nil
 }
 
 func (a *App) handleConnection(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	defer a.wg.Done()
-
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Fatal(err)
+		config.Logger.Errorf("Failed to upgrade connection: %v", err)
 		return
 	}
 	defer conn.Close()
-	log.WithField("service", config.ServiceName).Info("Client connected")
 
-	ip := conn.RemoteAddr().String()
-	if !a.IpRepo.IsNewIp(ctx, ip) {
-		log.WithField("service", config.ServiceName).Errorf("Not a new ip addess %s. Close connection", ip)
+	if err = conn.SetReadDeadline(time.Now().Add(time.Duration(config.Config.Timeout) * time.Millisecond)); err != nil {
+		config.Logger.Errorf("Error while setting timeout: %v", err)
 		return
 	}
 
-	num := a.NumRepo.GenUniqueNum(ctx)
-	msg := model.PrepareMessage("OK", num.String())
+	// Получаем IP-адрес нового соединения
+	ip := conn.RemoteAddr().String()
+	config.Logger.Infof("Client connected from ip: %s", ip)
 
+	// Если установлен strictMode=on, то проверяем только IP-адрес без учета номера порта.
+	if config.Config.StrictMode == "on" {
+		ip = parseIp(ip)
+	}
+	// Проверяем, было ли уже ранее соединение с этого IP-адреса. Если было, то - отказ
+	if !a.IpStorage.IsNewIp(ctx, ip) {
+		config.Logger.Errorf("Not a new ip addess %s. Close connection", ip)
+		return
+	}
+
+	// Читаем входящий запрос от клиента
+	mt, message, err := conn.ReadMessage()
+	if err != nil || mt == websocket.CloseMessage {
+		return
+	}
+	config.Logger.Infof("Message from client received: %s", message)
+
+	// Генерируем уникальный big.Int для ответа
+	num := a.NumStorage.GenUniqueNum(ctx)
+
+	// Формируем ответ в формате JSON
+	msg := model.PrepareMessage(model.MessageTypeResponse, num.String())
+
+	// Отправляем ответное сообщение
 	if err := conn.WriteMessage(websocket.TextMessage, msg.AsJson()); err != nil {
-		log.WithField("service", config.ServiceName).Errorf("Failed to send response: %v", err)
+		config.Logger.Errorf("Failed to send response: %v", err)
 		return
 	}
 }
 
 func preparePort(port int) string {
 	return fmt.Sprintf(":%d", port)
+}
+
+func parseIp(ip string) string {
+	return strings.Split(ip, ":")[0]
 }

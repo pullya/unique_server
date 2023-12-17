@@ -18,5 +18,6 @@ RUN go build -o ./bin/u-client cmd/u-client/main.go
 
 FROM alpine:latest AS client
 COPY --from=builder /usr/local/src/bin/u-client /
+COPY config.yaml ./
 
 CMD ["/u-client"]
